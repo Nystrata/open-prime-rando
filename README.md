@@ -1,2 +1,3 @@
-# Open Prime Rando
-Open Source randomizer patcher for Prime 2 and eventually 3.
+My personal fork of https://github.com/randovania/open-prime-rando  
+
+Nothing interested here on main, see https://github.com/Nystrata/open-prime-rando/tree/WidescreenHUDPatch
