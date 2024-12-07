@@ -76,8 +76,9 @@ class StartingBeamVisorAddresses:
 
 @dataclasses.dataclass(frozen=True)
 class WidescreenRenderAddresses:
-    frustum_culling_replacement: int
-    frustum_culling_insertion: int
+    frustum_culling_value: int
+    # frustum_culling_replacement: int
+    # frustum_culling_insertion: int
     frustum_replacement: int
     frustum_insertion: int
 
@@ -516,50 +517,91 @@ def apply_widescreen_hack(widescreen_render_symbols: WidescreenRenderAddresses, 
     Apply widescreen render hack to render the game in 16:9
     """
     # Ported from gamemasterplc's 16:9 Aspect Ratio Fix NTSC-U Gecko Code
-    frustum_culling_replacement = widescreen_render_symbols.frustum_culling_replacement
-    frustum_culling_insertion = widescreen_render_symbols.frustum_culling_insertion
+    frustum_culling_value = widescreen_render_symbols.frustum_culling_value
     frustum_replacement = widescreen_render_symbols.frustum_replacement
     frustum_insertion = widescreen_render_symbols.frustum_insertion
-
     if enabled:
-        # Expand frustum culling size to prevent things popping in/out at the sides of the screen by patching
-        dol_file.write_instructions(
-            frustum_culling_replacement,
-            [bl(frustum_culling_insertion, relative=False)],  # replace with jump to frustum_culling_insertion
-        )
-        dol_file.write_instructions(
-            frustum_culling_insertion,
+        # Expand frustum culling size from the default 0.5f
+        dol_file.write(frustum_culling_value, struct.pack('>f', 0.75))
+
+        # Expand frustum
+        dol_file.write_instructions(frustum_replacement,
             [
-                lis(r14, 0x4000),  # Load immediate shifted to load 0x40000000 (2.0f)
-                stw(r14, 0, r2),
-                lfs(f26, 0, r2),
-                blr(),
+                lfs(f10, -(frustum_replacement-frustum_insertion), r2)
+            ]
+        )
+
+        dol_file.write_instructions(frustum_replacement + 0x10,
+            [
+                b(frustum_insertion, relative=False) # replace with jump to frustum_insertion
+            ]
+        )
+
+        # Expand frustum: branched instrcutions
+        dol_file.write(frustum_insertion, struct.pack('>f', 1.33333))
+        dol_file.write_instructions(frustum_insertion + 0x4,
+            [
+                fdivs(f11, f10, f9, 0), # restore original instruction
+                lfs(f10, -0x2e18, r2), # restore original float value
+                b(frustum_replacement + 0x4, relative=False), # return from branch
             ],
         )
 
-        # Expand frustum view cone to render more horizontally by patching C_MTXFrustum
-        dol_file.write_instructions(
-            frustum_replacement,
-            [b(frustum_insertion, relative=False)],  # replace with jump to frustum_insertion
-        )
-        dol_file.write_instructions(
-            frustum_insertion,
-            [
-                lis(r14, 0x3FAA),  # Load immediate shifted to load 0x3FAA
-                ori(r14, r14, 0xAAAB),  # OR with 0xAAAB to construct 0x3FAAAAAB (1.33333f)
-                stw(r14, 0, r2),
-                lfs(f19, 0, r2),
-                fmuls(f9, f19, 0, f9),
-                fdivs(f11, f10, f9, 0),
-                b(frustum_replacement + 0x4, relative=False),
-            ],
-        )
-
-        return
-
-    # Restore vanilla behavior when widescreen hack is disabled
     # TODO Remove when RDV is updated to no longer cache patched DOL files
-    dol_file.write(frustum_culling_replacement, [0xFF, 0x40, 0x10, 0x90])
-    dol_file.write(frustum_culling_insertion, (b"\0" * 16))
-    dol_file.write(frustum_replacement, [0xED, 0x6A, 0x48, 0x24])
-    dol_file.write(frustum_insertion, (b"\0" * 28))
+    else:
+        # Restore frustum culling size
+        dol_file.write(frustum_culling_value, struct.pack('>f', 0.5)) # Restore the original 0.5f
+        # Restore frustum size
+        dol_file.write(frustum_replacement, [0xED, 0x6A, 0x48, 0x24]) # Restore original instruction
+        dol_file.write(frustum_insertion, (b"\0" * 28)) # Remove inserted code
+
+
+
+    # # Ported from gamemasterplc's 16:9 Aspect Ratio Fix NTSC-U Gecko Code
+    # frustum_culling_replacement = widescreen_render_symbols.frustum_culling_replacement
+    # frustum_culling_insertion = widescreen_render_symbols.frustum_culling_insertion
+    # frustum_replacement = widescreen_render_symbols.frustum_replacement
+    # frustum_insertion = widescreen_render_symbols.frustum_insertion
+    #
+    # if enabled:
+    #     # Expand frustum culling size to prevent things popping in/out at the sides of the screen by patching
+    #     dol_file.write_instructions(
+    #         frustum_culling_replacement,
+    #         [bl(frustum_culling_insertion, relative=False)],  # replace with jump to frustum_culling_insertion
+    #     )
+    #     dol_file.write_instructions(
+    #         frustum_culling_insertion,
+    #         [
+    #             lis(r14, 0x4000),  # Load immediate shifted to load 0x40000000 (2.0f)
+    #             stw(r14, 0, r2),
+    #             lfs(f26, 0, r2),
+    #             blr(),
+    #         ],
+    #     )
+    #
+    #     # Expand frustum view cone to render more horizontally by patching C_MTXFrustum
+    #     dol_file.write_instructions(
+    #         frustum_replacement,
+    #         [b(frustum_insertion, relative=False)],  # replace with jump to frustum_insertion
+    #     )
+    #     dol_file.write_instructions(
+    #         frustum_insertion,
+    #         [
+    #             lis(r14, 0x3FAA),  # Load immediate shifted to load 0x3FAA
+    #             ori(r14, r14, 0xAAAB),  # OR with 0xAAAB to construct 0x3FAAAAAB (1.33333f)
+    #             stw(r14, 0, r2),
+    #             lfs(f19, 0, r2),
+    #             fmuls(f9, f19, 0, f9),
+    #             fdivs(f11, f10, f9, 0),
+    #             b(frustum_replacement + 0x4, relative=False),
+    #         ],
+    #     )
+    #
+    #    return
+    #
+    # # Restore vanilla behavior when widescreen hack is disabled
+    # # TODO Remove when RDV is updated to no longer cache patched DOL files
+    # dol_file.write(frustum_culling_replacement, [0xFF, 0x40, 0x10, 0x90])
+    # dol_file.write(frustum_culling_insertion, (b"\0" * 16))
+    # dol_file.write(frustum_replacement, [0xED, 0x6A, 0x48, 0x24])
+    # dol_file.write(frustum_insertion, (b"\0" * 28))
