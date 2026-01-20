@@ -42,25 +42,35 @@ def test_files_dir() -> TestFilesDir:
 
 
 @pytest.fixture(scope="module")
-def prime2_iso_provider() -> IsoFileProvider:
-    return IsoFileProvider(Path(get_env_or_skip("PRIME2_ISO")))
+def prime2_ntsc_iso_path() -> Path:
+    return Path(get_env_or_skip("PRIME2_ISO"))
 
 
 @pytest.fixture(scope="module")
-def pal_prime2_iso_provider() -> IsoFileProvider:
-    return IsoFileProvider(Path(get_env_or_skip("PRIME2_PAL_ISO", override_fail=False)))
+def prime2_pal_iso_path() -> Path:
+    return Path(get_env_or_skip("PRIME2_ISO", override_fail=False))
+
+
+@pytest.fixture(scope="module")
+def prime2_iso_provider(prime2_ntsc_iso_path) -> IsoFileProvider:
+    return IsoFileProvider(prime2_ntsc_iso_path)
+
+
+@pytest.fixture(scope="module")
+def pal_prime2_iso_provider(prime2_pal_iso_path) -> IsoFileProvider:
+    return IsoFileProvider(prime2_pal_iso_path)
 
 
 @pytest.fixture(scope="module")
 def raw_prime2_editor(prime2_iso_provider: IsoFileProvider) -> PatcherEditor:
-    return PatcherEditor(prime2_iso_provider, game=Game.ECHOES)
+    return PatcherEditor(prime2_iso_provider, target_game=Game.ECHOES)
 
 
 @pytest.fixture
 def prime2_editor(raw_prime2_editor: PatcherEditor):
     editor = raw_prime2_editor
     yield editor
-    editor.memory_files = {}
+    editor._memory_files = {}
     for custom_asset, asset_id in editor._custom_asset_ids.items():
         editor._paks_for_asset_id.pop(asset_id)
     editor._custom_asset_ids = {}
